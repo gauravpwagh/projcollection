@@ -1,0 +1,27 @@
+// Load Subroutine for loading table
+$(include=[lib://AttachedFiles/load_table.txt])
+
+
+// Create new Section and Add following for the tables you want and prefix you decide for them
+TablePrefix:
+Mapping
+Load * Inline [
+	_table_name, _table_prefix
+    tdms_safety_bonddefect, tdms_sfbd
+    tdms_safety_criticalimp, tdms_sfci
+    tdms_safety_fpsecoverdue, tdms_sffpo
+    tdms_safety_leaning_mast, tdms_sflm
+    tdms_safety_leaningmastat, tdms_sflms
+    tdms_safety_leaningmastbend, tdms_sflmb
+    tdms_safety_overlapoverdue, tdms_sfod
+    tdms_safety_turnoutoverdue, tdms_sftd
+    uccc_lat_long_master_final, sttn
+];
+
+// Add the following to create a composite key to avoid creation of synthetic keys. Use table prefix above set with - seperator and .column_name you want (this can be anything not necessary matching)
+LinkTables:
+LOAD _link_tables
+Inline [
+    _link_tables
+    tdms_sfbd-tdms_sfci-tdms_sffpo-tdms_sflm-tdms_sflms-tdms_sflmb-tdms_sfod-tdms_sftd-sttn.station
+];

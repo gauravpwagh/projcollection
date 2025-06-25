@@ -1,0 +1,41 @@
+// Name of the table
+LET table_schema = 'public';
+LET table_name = 'tdms_safety_bonddefect';
+
+
+//add fields that are required to be fetched (Default Set to All or blank to fetch all fields)
+LET includeColumns = '';
+
+
+//add fields that are not required to be fetched
+LET ignoreColumns = '';
+
+//Change column_name|new_column_name
+LET rename_columns = '';
+
+//Transform columns type
+LET numFields = '';
+LET strFields = '';
+
+//Format column_name|date_format
+LET dateFields = 'inspdate|YYYY-MM-DD hh:mm:ss.fff';
+// Set the date format for columns that are required to be set in this format
+LET newdateFormat = 'YYYY-MM-DD';  // You can change this format as needed
+
+
+
+//Format [column1]&[Column2]&...
+LET linkFields = 'SubField(Trim(sectiondesc), ''-'', 1)';
+
+
+LET addColumns = 'SubField(Trim(sectiondesc), ''-'', 1) AS tdms_sfbd.station,
+				  If(defectdesc = ''Other'', ''Others'', defectdesc) as tdms_sfbd.defecttype';
+
+
+//Filter data based on WHERE condition
+LET whereCondition = 'WHERE "tdate" = (SELECT MAX("tdate") FROM $(table_schema).$(table_name))';
+
+
+// Format LoadTable(_table_schema, _table_name, _rename_columns, _num_fields, _str_fields, _date_fields, _include_columns, _ignore_columns, _add_columns, _where_condition, _link_fields,);
+CALL LoadTable('$(table_schema)', '$(table_name)', '$(rename_columns)', '$(numFields)', '$(strFields)', '$(dateFields)', '$(includeColumns)', '$(ignoreColumns)', '$(addColumns)', '$(whereCondition)','$(linkFields)');
+

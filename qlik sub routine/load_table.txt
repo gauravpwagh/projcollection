@@ -1,0 +1,157 @@
+SUB LoadTable(_table_schema, _table_name, _rename_columns, _num_fields, _str_fields, _date_fields, _include_columns, _ignore_columns, _add_columns, _where_condition, _link_fields)
+
+	
+    LET _table_short_form = ApplyMap('TablePrefix', table_name, '');
+    LET _table_column_prefix = _table_short_form & '.';
+     
+     
+    // Step 1: Check if the table exists in the schema
+    TableExistsCheck:
+    SQL SELECT COUNT(*) AS table_exists
+    FROM information_schema.tables
+    WHERE table_schema = '$(_table_schema)' AND table_name = '$(_table_name)';
+
+    // Step 2: Peek the value
+    LET _table_exists = Peek('table_exists', 0, 'TableExistsCheck');
+
+    // Step 3: Exit if the table doesn't exist
+    IF $(#_table_exists) = 0 THEN
+        TRACE Table '$(_table_schema).$(_table_name)' does not exist.;
+        DROP TABLE TableExistsCheck;
+        EXIT SUB;
+    END IF
+    
+    DROP TABLE TableExistsCheck;
+
+
+    Columns:
+    SQL SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = '$(_table_schema)' AND table_name = '$(_table_name)';
+    
+    TRACE Schema: $(_table_schema);
+	TRACE Table: $(_table_name);
+    
+    
+//  CALL CombineTablePrefix('$(_link_tables)', '$(_table_name)');
+    LET _date_fields = '$(_date_fields)' & ',';
+    LET _rename_columns = '$(_rename_columns)' & ',';
+    LET linkfieldsTrimmed = Trim(_link_fields);
+    LET _ignore_columns = ',' & '$(_ignore_columns)' & ',';
+    LET _ignore_columns = Replace(_ignore_columns, ' ', '');
+    
+    LET _include_filter = 0;
+    IF(('$(_include_columns)' = 'All') OR ('$(_include_columns)' = '')) THEN
+        LET _include_filter = 1;
+    ELSE
+    	LET _include_columns = ',' & '$(_include_columns)' & ',';
+        LET _include_columns = Replace(_include_columns, ' ', '');
+    END IF
+    
+//     TRACE ignore: $(_ignore_columns);
+   
+    // Step 2: Initialize an empty variable to hold the column names
+    LET _vField = '';  // Variable to store the concatenated column names
+    LET _load_field = '';
+    LET _changed_column_name = '';
+//     LET _no_of_matching_link_fields = 0;
+
+    // Step 3: Loop through the Columns table and concatenate column names with double quotes and commas
+    FOR _column_name_count = 0 TO NoOfRows('Columns') - 1
+        LET _get_column_name = Peek('column_name', _column_name_count, 'Columns');  // Get the column name at index i
+//         Trace getColumns: '$(_get_column_name)';
+		IF (_include_filter = 1) OR (Index('$(_include_columns)', ',' & _get_column_name & ',') > 0) THEN
+            IF Index('$(_ignore_columns)', ',' & _get_column_name & ',') = 0 THEN
+                // For subsequent columns, concatenate with quotes and a comma
+                LET _vField = '$(_vField), "$(_get_column_name)"';
+
+
+
+                LET _changed_column_name = '$(_get_column_name)';
+
+                IF Index('$(_rename_columns)', _get_column_name) > 0 THEN
+                    LET _changed_column_name = TextBetween('$(_rename_columns)', '$(_get_column_name)' & '|', ',');
+                END IF
+
+                IF Index('$(_num_fields)', _get_column_name) > 0 THEN
+                    // If match is found in numFields, apply Num() function for typecasting
+                    LET _load_field = '$(_load_field), Num($(_get_column_name)) As [$(_table_column_prefix)$(_changed_column_name)]';
+
+                // Check if _get_column_name is in strFields
+                ELSEIF Index('$(_str_fields)', _get_column_name) > 0 THEN
+                    // If match is found in strFields, apply Text() function for typecasting
+                    LET _load_field = '$(_load_field), Text($(_get_column_name)) As [$(_table_column_prefix)$(_changed_column_name)]';
+
+                // Check if _get_column_name is in dateFields
+                ELSEIF Len(TextBetween('$(_date_fields)', '$(_get_column_name)' & '|', ',')) > 0 THEN           
+    //                 LET _load_field = '$(_load_field),Date(Date#($(_get_column_name), ''$(oldDateFormat)''), ''$(newdateFormat)'') As $(_table_column_prefix)$(_get_column_name)';
+                    LET oldDateFormat = TextBetween('$(_date_fields)', '$(_get_column_name)' & '|', ',');
+                    LET transformedDate = If(IsNum($(_get_column_name)), 
+                                              'Date($(_get_column_name), ''$(newdateFormat)'')',  // If numeric, apply Date format
+                                              'Date(Date#($(_get_column_name), ''$(oldDateFormat)''), ''$(newdateFormat)'')'  // If not numeric, convert and format
+                                          );
+                    LET _load_field = '$(_load_field), $(transformedDate) As [$(_table_column_prefix)$(_changed_column_name)]';
+
+                ELSE
+                    // Otherwise, just add the column name without typecasting
+                    LET _load_field = '$(_load_field), [$(_get_column_name)] As [$(_table_column_prefix)$(_changed_column_name)]';
+                END IF
+            END IF
+		END IF
+    NEXT _column_name_count
+    
+    
+    FOR _link_tables_count = 0 TO NoOfRows('LinkTables') - 1 // i starts from 0 to the number of rows minus 1
+        // Get the value of the _list field in the current row
+        LET _link_table_names = Peek('_link_tables', $(_link_tables_count), 'LinkTables');
+        // Use Index to check if the searchVariable is in the _list value
+        
+        IF Index('$(_link_table_names)', '$(_table_short_form)') > 0 THEN
+            IF Len('$(_link_fields)') > 0 THEN
+                LET _load_field = '$(_load_field), $(_link_fields) As [$(_link_table_names)]';
+//                 EXIT FOR; // Exit the loop if found
+            END IF
+        ENDIF
+    NEXT _link_tables_count
+
+
+// 	IF Index('$(_link_table_names)', '$(_table_short_form)') > 0 THEN
+//     	IF Len('$(_link_fields)') > 0 THEN
+//             LET _load_field = '$(_load_field), $(_link_fields) As [$(_link_table_names)]';
+//             //EXIT FOR; // Exit the loop if found
+//     	END IF
+//     ENDIF
+
+    
+	IF Len('$(_add_columns)') > 0 THEN	
+        LET _load_field = '$(_load_field), $(_add_columns)';
+    END IF
+
+    // Remove the first comma and space from _vField and _load_field
+    LET _vField = Mid('$(_vField)', 3);  // Start from the 3rd character to remove the initial ", "
+    LET _load_field = Mid('$(_load_field)', 3);  // Start from the 3rd character to remove the initial ", "
+    
+//    Trace '$(_load_field)';
+
+//     Trace _vField: $(_vField);
+    LOAD $(_load_field);
+
+    [$(_table_name)]:
+    SELECT $(_vField)
+    FROM "$(_table_schema)"."$(_table_name)"
+    $(_where_condition);
+    
+    
+//     TRACE datefield: '$(dateFields)';
+    FOR _dt_field_count = 0 TO SubStringCount('$(dateFields)', ',')
+        LET thisField = Trim(SubField('$(dateFields)', ',', $(_dt_field_count)+1));
+        LET fieldName = SubField('$(thisField)', '|', 1);
+//         Trace FieldName: '$(fieldName)'
+        // Optional: You could use the format too via SubField('$(thisField)', '|', 2)
+        Tag Field [$(_table_column_prefix)$(fieldName)] with '$date';
+    NEXT _dt_field_count
+    
+
+    DROP TABLE Columns;
+
+END SUB
